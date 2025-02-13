@@ -1,0 +1,6 @@
+---
+# ansible/group_vars/all.yml
+proxmox_user: "{{ proxmox_user_var }}"
+proxmox_password: "{{ proxmox_password_var }}"
+proxmox_host: "{{ proxmox_host_var }}"
+proxmox_node: "{{ proxmox_node_var }}"

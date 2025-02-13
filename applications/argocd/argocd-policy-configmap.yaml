@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-policy
+  namespace: argocd
+data:
+  argocd-policy.hcl: |
+    path "secret/data/*" {
+      capabilities = ["read"]
+    }

@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-config-job
+  namespace: argocd
+spec:
+  template:
+    spec:
+      containers:
+        - name: vault-config
+          image: vault:1.8.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              vault auth enable approle
+              vault policy write argocd-policy /etc/vault/argocd-policy.hcl
+              vault write auth/approle/role/argocd-role \
+                token_policies="argocd-policy" \
+                token_ttl=1h \
+                token_max_ttl=4h
+              role_id=$(vault read -field=role_id auth/approle/role/argocd-role/role-id)
+              secret_id=$(vault write -f -field=secret_id auth/approle/role/argocd-role/secret-id)
+              kubectl create configmap argocd-vault-plugin --from-literal=VAULT_ADDR=http://vault.vault.svc.cluster.local:8200 --from-literal=VAULT_ROLE_ID=$role_id --from-literal=VAULT_SECRET_ID=$secret_id -n argocd
+          env:
+            - name: VAULT_ADDR
+              value: "http://vault.vault.svc.cluster.local:8200"
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-root-token
+                  key: token
+          volumeMounts:
+            - name: vault-policy
+              mountPath: /etc/vault
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: vault-policy
+          configMap:
+            name: argocd-policy
+      restartPolicy: OnFailure

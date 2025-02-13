@@ -1,0 +1,86 @@
+---
+- name: Generate Talos machine configurations
+  hosts: localhost
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Remove existing controlplane.yaml if it exists
+      ansible.builtin.file:
+        path: "{{ controlplane_yaml }}"
+        state: absent
+
+    - name: Remove existing worker.yaml if it exists
+      ansible.builtin.file:
+        path: "{{ worker_yaml }}"
+        state: absent
+
+    - name: Remove existing talosconfig if it exists
+      ansible.builtin.file:
+        path: "{{ talosconfig }}"
+        state: absent
+
+    - name: Generate Talos machine configurations
+      ansible.builtin.command:
+        cmd: talosctl gen config {{ k8s_cluster_name }} {{ k8s_api_endpoint }} --output-dir {{ talos_config_output_dir }}
+      environment:
+        TALOSCONFIG: "{{ talosconfig }}"
+
+- name: Apply Talos configurations to control plane nodes
+  hosts: localhost
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Apply Talos config to control plane nodes
+      ansible.builtin.command:
+        cmd: talosctl apply-config --insecure --nodes {{ hostvars[item].ansible_host }} --file {{ controlplane_yaml }}
+      environment:
+        TALOSCONFIG: "{{ talosconfig }}"
+      loop: "{{ control_plane_nodes }}"
+
+- name: Apply Talos configurations to worker nodes
+  hosts: localhost
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Apply Talos config to worker nodes
+      ansible.builtin.command:
+        cmd: talosctl apply-config --insecure --nodes {{ hostvars[item].ansible_host }} --file {{ worker_yaml }}
+      environment:
+        TALOSCONFIG: "{{ talosconfig }}"
+      loop: "{{ worker_nodes }}"
+
+- name: Configure talosctl to talk to control plane node
+  hosts: localhost
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Set TALOSCONFIG environment variable
+      ansible.builtin.set_fact:
+        TALOSCONFIG: "{{ talosconfig }}"
+
+    - name: Configure talosctl endpoint
+      ansible.builtin.command:
+        cmd: talosctl config endpoint {{ hostvars['vm-500'].ansible_host }}
+      environment:
+        TALOSCONFIG: "{{ talosconfig }}"
+
+    - name: Configure talosctl node
+      ansible.builtin.command:
+        cmd: talosctl config node {{ hostvars['vm-500'].ansible_host }}
+      environment:
+        TALOSCONFIG: "{{ talosconfig }}"
+
+- name: Bootstrap Etcd
+  hosts: localhost
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Wait for 1 minute to allow VMs to reboot
+      ansible.builtin.pause:
+        seconds: 60
+
+    - name: Bootstrap Etcd
+      ansible.builtin.command:
+        cmd: talosctl bootstrap
+      environment:
+        TALOSCONFIG: "{{ talosconfig }}"

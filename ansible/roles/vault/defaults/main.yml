@@ -1,0 +1,10 @@
+---
+# roles/vault/defaults/main.yml
+
+vault_version: "1.18.2"
+vault_binary_url: "https://releases.hashicorp.com/vault/{{ vault_version }}/vault_{{ vault_version }}_linux_amd64.zip"
+vault_storage_path: "/var/lib/vault"
+vault_user: "vault"
+vault_group: "vault"
+vault_config_file: "/etc/vault.d/vault.hcl"
+vault_address: "http://127.0.0.1:8200"

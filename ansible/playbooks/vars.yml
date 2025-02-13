@@ -1,0 +1,19 @@
+# filepath: /Users/jordan/repos/bws/github/k8s-gitops/ansible/playbooks/vars.yml
+
+talos_config_output_dir: "_out"
+controlplane_yaml: "{{ talos_config_output_dir }}/controlplane.yaml"
+worker_yaml: "{{ talos_config_output_dir }}/worker.yaml"
+talosconfig: "{{ talos_config_output_dir }}/talosconfig"
+k8s_cluster_name: "js-8-k8s"
+k8s_api_endpoint: "https://{{ hostvars['vm-500'].ansible_host }}:6443"
+control_plane_nodes:
+  - vm-500
+worker_nodes:
+  - vm-600
+  - vm-601
+  - vm-602
+hosts_ini_path: "/$HOME/repos/bws/github/k8s-gitops/ansible/inventory/prod/hosts.ini"
+proxmox_user_var: "root@pam"
+proxmox_password_var: "password"
+proxmox_host_var: "proxmox"
+proxmox_node_var: "pve"

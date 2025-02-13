@@ -1,0 +1,80 @@
+---
+- name: Wait for Talos OS to install
+  hosts: localhost
+  tasks:
+    - name: Wait for 30 seconds
+      ansible.builtin.pause:
+        seconds: 30
+
+- name: Get VM IP addresses and populate hosts file
+  hosts: proxmox
+  vars_files:
+    - ../group_vars/all.yml
+    - vars.yml
+  tasks:
+    - name: Get VM 500 IP address
+      ansible.builtin.command:
+        cmd: qm guest cmd 500 network-get-interfaces
+      register: vm_500_interfaces
+      become: true
+
+    - name: Extract VM 500 IP address
+      set_fact:
+        vm_500_ip: "{{ vm_500_interfaces.stdout | from_json | selectattr('name', 'equalto', 'eth0') | map(attribute='ip-addresses') | first | selectattr('ip-address-type', 'equalto', 'ipv4') | map(attribute='ip-address') | first }}"
+
+    - name: Get VM 600 IP address
+      ansible.builtin.command:
+        cmd: qm guest cmd 600 network-get-interfaces
+      register: vm_600_interfaces
+      become: true
+
+    - name: Extract VM 600 IP address
+      set_fact:
+        vm_600_ip: "{{ vm_600_interfaces.stdout | from_json | selectattr('name', 'equalto', 'eth0') | map(attribute='ip-addresses') | first | selectattr('ip-address-type', 'equalto', 'ipv4') | map(attribute='ip-address') | first }}"
+
+    - name: Get VM 601 IP address
+      ansible.builtin.command:
+        cmd: qm guest cmd 601 network-get-interfaces
+      register: vm_601_interfaces
+      become: true
+
+    - name: Extract VM 601 IP address
+      set_fact:
+        vm_601_ip: "{{ vm_601_interfaces.stdout | from_json | selectattr('name', 'equalto', 'eth0') | map(attribute='ip-addresses') | first | selectattr('ip-address-type', 'equalto', 'ipv4') | map(attribute='ip-address') | first }}"
+
+    - name: Get VM 602 IP address
+      ansible.builtin.command:
+        cmd: qm guest cmd 602 network-get-interfaces
+      register: vm_602_interfaces
+      become: true
+
+    - name: Extract VM 602 IP address
+      set_fact:
+        vm_602_ip: "{{ vm_602_interfaces.stdout | from_json | selectattr('name', 'equalto', 'eth0') | map(attribute='ip-addresses') | first | selectattr('ip-address-type', 'equalto', 'ipv4') | map(attribute='ip-address') | first }}"
+
+    - name: Set vm_ips fact
+      set_fact:
+        vm_ips:
+          - vmid: 500
+            ip: "{{ vm_500_ip }}"
+          - vmid: 600
+            ip: "{{ vm_600_ip }}"
+          - vmid: 601
+            ip: "{{ vm_601_ip }}"
+          - vmid: 602
+            ip: "{{ vm_602_ip }}"
+
+    - name: Ensure hosts.ini exists
+      ansible.builtin.file:
+        path: "{{ hosts_ini_path }}"
+        state: touch
+      delegate_to: localhost
+
+    - name: Update hosts.ini with VM IP addresses
+      ansible.builtin.lineinfile:
+        path: "{{ hosts_ini_path }}"
+        regexp: "^{{ item.vmid }} "
+        line: "vm-{{ item.vmid }} ansible_host={{ item.ip }} ansible_user=root ansible_ssh_private_key_file=~/.ssh/id_ed25519_talos"
+        create: yes
+      loop: "{{ vm_ips }}"
+      delegate_to: localhost

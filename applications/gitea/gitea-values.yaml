@@ -1,0 +1,63 @@
+# Disable PostgreSQL High Availability
+postgresql-ha:
+  enabled: false
+
+# Configure PostgreSQL
+postgresql:
+  enabled: true
+  postgresqlUsername: gitea
+  postgresqlPassword: SecureP@ssw0rd
+  postgresqlDatabase: gitea
+  primary:
+    persistence:
+      enabled: true
+      storageClass: nfs
+      accessMode: ReadWriteOnce
+      mountPath: /gitea/data
+      size: 100Gi
+
+# Configure Redis
+redis-cluster:
+  enabled: false
+redis:
+  enabled: true
+  architecture: standalone
+  master:
+    persistence:
+      enabled: true
+      storageClass: nfs
+      accessMode: ReadWriteOnce
+      mountPath: /gitea/data
+      size: 5Gi
+
+# Gitea Service Configuration
+service:
+  type: ClusterIP
+  port: 3000
+
+# Gitea Application Persistence
+persistence:
+  enabled: true
+  storageClass: nfs
+  accessMode: ReadWriteOnce
+      mountPath: /gitea/data
+  size: 10Gi
+
+# Security Context Configuration
+containerSecurityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsUser: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+podSecurityContext:
+  runAsUser: 1000
+
+# NFS Provisioner Permissions
+volumePermissions:
+  enabled: true

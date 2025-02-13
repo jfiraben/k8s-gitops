@@ -1,0 +1,197 @@
+---
+# roles/vault/tasks/main.yml
+
+- name: Create vault group
+  group:
+    name: "{{ vault_group }}"
+
+- name: Create vault user
+  user:
+    name: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    system: yes
+    shell: "/sbin/nologin"
+    create_home: no
+
+- name: Install prerequisites
+  apt:
+    name:
+      - unzip
+    update_cache: yes
+
+- name: Download Vault binary
+  get_url:
+    url: "{{ vault_binary_url }}"
+    dest: /tmp/vault.zip
+    mode: '0644'
+
+- name: Unzip Vault binary
+  unarchive:
+    src: /tmp/vault.zip
+    dest: /usr/local/bin/
+    remote_src: yes
+    mode: '0755'
+
+- name: Create Vault data directory
+  file:
+    path: "{{ vault_storage_path }}"
+    state: directory
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0750'
+
+- name: Create Vault configuration directory
+  file:
+    path: /etc/vault.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create Vault configuration file
+  template:
+    src: vault.hcl.j2
+    dest: /etc/vault.d/vault.hcl
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create Vault service file
+  template:
+    src: vault.service.j2
+    dest: /etc/systemd/system/vault.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Enable and start Vault service
+  systemd:
+    name: vault
+    enabled: yes
+    state: started
+  notify: Restart Vault
+
+- name: Wait for Vault to be available
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: 8200
+    delay: 5
+    timeout: 30
+
+- name: Check if Vault is Initialized
+  command: vault status -format=json
+  register: vault_status
+  failed_when: false
+  ignore_errors: true
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"
+
+- name: Initialize Vault
+  command: vault operator init -key-shares=1 -key-threshold=1 -format=json
+  register: vault_init
+  when: vault_status.stdout is defined and (vault_status.stdout | from_json).initialized == false
+  no_log: false
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"
+
+- name: Store Vault Initialization Data Locally
+  copy:
+    content: "{{ vault_init.stdout }}"
+    dest: /root/vault_init.json
+  when: vault_init is defined and vault_init.changed
+
+- name: Check if vault_init.json exists
+  stat:
+    path: /root/vault_init.json
+  register: vault_init_file
+
+- name: Read Vault Initialization Data
+  slurp:
+    src: /root/vault_init.json
+  register: vault_init_content
+  when: vault_init_file.stat.exists
+  
+- name: Unseal Vault
+  command: vault operator unseal "{{ (vault_init_content.content | b64decode | from_json).unseal_keys_b64[0] }}"
+  when: vault_init_file.stat.exists and (vault_status.stdout | from_json).sealed == true
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"
+
+- name: Authenticate with Vault
+  command: vault login "{{ (vault_init_content.content | b64decode | from_json).root_token }}"
+  register: vault_auth
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"
+  changed_when: "'token' in vault_auth.stdout"
+  when: vault_init_file.stat.exists
+
+- name: Register Vault token
+  set_fact:
+    vault_token: "{{ (vault_auth.stdout_lines | select('match', '^token\\s+\\S+') | first).split()[1] }}"
+  when: vault_auth is defined
+
+- name: Enable KV Secrets Engine
+  command: vault secrets enable -path=secret kv-v2
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"
+    VAULT_TOKEN: "{{ (vault_init_content.content | b64decode | from_json).root_token }}"
+  register: enable_kv
+  ignore_errors: true
+  changed_when: enable_kv.rc == 0
+
+- name: Create paths in KV Secrets Engine
+  command: >
+    vault kv put secret/{{ item }} dummy_key=dummy_value
+  with_items:
+    - vault/keys
+    - vault/certs
+    - vault/passwords
+    - vault/data
+    - argocd/keys
+    - argocd/certs
+    - argocd/passwords
+    - argocd/data
+    - gitlab/keys
+    - gitlab/certs
+    - gitlab/passwords
+    - gitlab/data
+    - authentik/keys
+    - authentik/certs
+    - authentik/passwords
+    - authentik/data
+    - misc/keys
+    - misc/certs
+    - misc/passwords
+    - misc/data
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"
+    VAULT_TOKEN: "{{ vault_token }}"
+
+- name: Store Vault Initialization Data in KV Secrets Engine
+  command: >
+    vault kv put secret/vault/init_data content="{{ vault_init_content.content | b64decode }}"
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"
+    VAULT_TOKEN: "{{ (vault_init_content.content | b64decode | from_json).root_token }}"
+
+- name: Fetch Vault Initialization Data to Local Machine
+  fetch:
+    src: /root/vault_init.json
+    dest: ./../secrets/vault/secrets/vault_init.json
+    flat: yes
+  when: vault_init_file.stat.exists
+
+- name: Export VAULT_ADDR environment variable
+  lineinfile:
+    path: /etc/profile.d/vault.sh
+    line: "export VAULT_ADDR={{ vault_address }}"
+    create: yes
+    mode: '0755'
+  environment:
+    VAULT_ADDR: "http://{{ vault_address }}:8200"
+
+- name: Reload shell environment
+  shell: source /etc/profile.d/vault.sh
+  args:
+    executable: /bin/bash

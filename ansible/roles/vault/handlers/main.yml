@@ -1,0 +1,18 @@
+---
+# roles/vault/handlers/main.yml
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Restart Vault
+  ansible.builtin.systemd:
+    name: vault
+    state: restarted
+  notify: Unseal Vault
+
+- name: Unseal Vault
+  command: vault operator unseal "{{ (vault_init_content.content | b64decode | from_json).unseal_keys_b64[0] }}"
+  when: vault_init_file.stat.exists and (vault_status.stdout | from_json).sealed == true
+  environment:
+    VAULT_ADDR: "http://{{ ansible_host }}:8200"

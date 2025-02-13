@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops
+  namespace: argocd
+spec:
+  description: Project for managing GitOps applications
+  sourceRepos:
+    - 'http://gitea-http.gitea.svc.cluster.local:3000/jordan/k8s-gitops.git'
+  destinations:
+    - namespace: '*'
+      server: 'https://kubernetes.default.svc'
+    - namespace: argocd
+      server: 'https://kubernetes.default.svc'
+    - namespace: jenkins
+      server: 'https://kubernetes.default.svc'
+    - namespace: gitea
+      server: 'https://kubernetes.default.svc'
+    - namespace: vault
+      server: 'https://kubernetes.default.svc'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

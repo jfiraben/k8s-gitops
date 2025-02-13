@@ -1,0 +1,22 @@
+replicaCount: 2
+
+service:
+  type: NodePort
+  ports:
+    web:
+      port: 80
+      nodePort: 32080      # Accessible within the local network
+      name: web
+    websecure:
+      port: 443
+      nodePort: 32443      # Accessible within the local network
+      name: websecure
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
