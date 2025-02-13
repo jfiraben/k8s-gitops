@@ -45,3 +45,5 @@ terraform/scripts/secrets.sh
 terraform/environments/prod/values/*
 terraform/environments/prod/nfs/*
 terraform/environments/prod/.terraform/*
+
+ansible/inventory/staging/*
